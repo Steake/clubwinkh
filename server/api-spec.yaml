@@ -28,6 +28,9 @@ components:
         role:
           type: string
           enum: [user, admin]
+        status:
+          type: string
+          enum: [active, suspended]
         balance:
           type: number
         createdAt:
@@ -46,9 +49,11 @@ components:
           type: string
         type:
           type: string
-          enum: [deposit, withdrawal, bet, win]
+          enum: [deposit, withdrawal, bet, win, credit, debit]
         amount:
           type: number
+        description:
+          type: string
         status:
           type: string
           enum: [pending, completed, failed]
@@ -206,6 +211,77 @@ paths:
         404:
           description: User not found
 
+    patch:
+      summary: Update user status (admin only)
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [active, suspended]
+      responses:
+        200:
+          description: User status updated
+        403:
+          description: Forbidden
+        404:
+          description: User not found
+
+  /users/{userId}/balance:
+    post:
+      summary: Update user balance (admin only)
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - amount
+                - description
+              properties:
+                type:
+                  type: string
+                  enum: [credit, debit]
+                amount:
+                  type: number
+                description:
+                  type: string
+      responses:
+        200:
+          description: Balance updated successfully
+        400:
+          description: Invalid operation
+        403:
+          description: Forbidden
+        404:
+          description: User not found
+
   /transactions:
     post:
       summary: Create new transaction
@@ -221,12 +297,15 @@ paths:
               required:
                 - type
                 - amount
+                - description
               properties:
                 type:
                   type: string
-                  enum: [deposit, withdrawal, bet, win]
+                  enum: [deposit, withdrawal, bet, win, credit, debit]
                 amount:
                   type: number
+                description:
+                  type: string
       responses:
         201:
           description: Transaction created

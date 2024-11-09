@@ -1,5 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 const { generateToken } = require('../middleware/auth');
 
@@ -9,7 +10,8 @@ const router = express.Router();
 const registerValidation = [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
-  body('username').trim().isLength({ min: 3 })
+  body('username').trim().isLength({ min: 3 }),
+  body('role').optional().isIn(['user', 'admin'])
 ];
 
 const loginValidation = [
@@ -26,7 +28,7 @@ router.post('/register', registerValidation, async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, username } = req.body;
+    const { email, password, username, role } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({
@@ -44,13 +46,19 @@ router.post('/register', registerValidation, async (req, res) => {
       });
     }
 
-    // Create new user
-    const user = new User({
+    // Create new user with explicit role setting
+    const userData = {
       email,
       password,
       username
-    });
+    };
 
+    // Only set role if it's explicitly provided and valid
+    if (role === 'admin') {
+      userData.role = 'admin';
+    }
+
+    const user = new User(userData);
     await user.save();
 
     // Generate token

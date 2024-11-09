@@ -27,6 +27,11 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'admin'],
     default: 'user'
   },
+  status: {
+    type: String,
+    enum: ['active', 'suspended'],
+    default: 'active'
+  },
   balance: {
     type: Number,
     default: 0,
@@ -78,6 +83,29 @@ userSchema.methods.updateBalance = async function(amount) {
   return this.save();
 };
 
+// Method to handle admin balance operations
+userSchema.methods.adminBalanceOperation = async function(type, amount) {
+  if (this.status === 'suspended') {
+    throw new Error('Cannot perform operations on suspended account');
+  }
+  
+  if (type === 'debit' && this.balance < amount) {
+    throw new Error('Insufficient balance for debit operation');
+  }
+  
+  const balanceChange = type === 'credit' ? amount : -amount;
+  return this.updateBalance(balanceChange);
+};
+
+// Method to update user status
+userSchema.methods.updateStatus = async function(newStatus) {
+  if (!['active', 'suspended'].includes(newStatus)) {
+    throw new Error('Invalid status');
+  }
+  this.status = newStatus;
+  return this.save();
+};
+
 // Static method to find by email
 userSchema.statics.findByEmail = function(email) {
   return this.findOne({ email: email.toLowerCase() });
@@ -87,6 +115,7 @@ userSchema.statics.findByEmail = function(email) {
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
 userSchema.index({ role: 1 });
+userSchema.index({ status: 1 });
 userSchema.index({ lastActive: -1 });
 
 const User = mongoose.model('User', userSchema);

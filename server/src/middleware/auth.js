@@ -1,43 +1,51 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 
-exports.authenticate = async (req, res, next) => {
+const generateToken = (userId) => {
+  return jwt.sign(
+    { userId },
+    process.env.JWT_SECRET || 'test-secret',
+    { expiresIn: '24h' }
+  );
+};
+
+const isAuthenticated = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authentication required' });
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
     }
 
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'test-secret');
     const user = await User.findById(decoded.userId);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
 
-    // Update last active timestamp
-    user.lastActive = new Date();
-    await user.save();
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    console.error('Auth middleware error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
   }
 };
 
-exports.requireAdmin = async (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
+const isAdmin = [
+  isAuthenticated,
+  (req, res, next) => {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
   }
-  next();
-};
+];
 
-exports.generateToken = (userId) => {
-  return jwt.sign(
-    { userId },
-    process.env.JWT_SECRET,
-    { expiresIn: '24h' }
-  );
+module.exports = {
+  generateToken,
+  isAuthenticated,
+  isAdmin
 };

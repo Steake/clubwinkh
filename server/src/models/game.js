@@ -11,159 +11,83 @@ const gameSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  status: {
+    type: String,
+    enum: ['active', 'maintenance', 'disabled'],
+    default: 'active',
+    index: true
+  },
+  type: {
+    type: String,
+    required: true,
+    index: true
+  },
   minBet: {
     type: Number,
     required: true,
-    min: [0, 'Minimum bet cannot be negative']
+    min: 0
   },
   maxBet: {
     type: Number,
     required: true,
-    validate: {
-      validator: function(v) {
-        return v >= this.minBet;
-      },
-      message: 'Maximum bet must be greater than or equal to minimum bet'
-    }
+    min: 0
   },
-  isActive: {
-    type: Boolean,
-    default: true,
-    index: true
-  },
-  houseEdge: {
+  payoutRatio: {
     type: Number,
     required: true,
-    min: [0, 'House edge cannot be negative'],
-    max: [100, 'House edge cannot exceed 100%'],
-    default: 2.5
+    min: 0
   },
-  statistics: {
-    totalBets: {
-      type: Number,
-      default: 0
-    },
-    totalWagered: {
-      type: Number,
-      default: 0
-    },
-    totalPayout: {
-      type: Number,
-      default: 0
-    }
+  settings: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   },
-  lastPlayed: {
-    type: Date,
-    default: null
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   }
 }, {
   timestamps: true
 });
 
 // Indexes
-gameSchema.index({ name: 1 });
-gameSchema.index({ isActive: 1, createdAt: -1 });
+gameSchema.index({ name: 'text', description: 'text' });
+gameSchema.index({ type: 1, status: 1 });
 
 // Methods
 
-// Process a bet and determine the outcome
-gameSchema.methods.processBet = async function(userId, amount) {
-  const Transaction = mongoose.model('Transaction');
-  const session = await mongoose.startSession();
-  
-  try {
-    session.startTransaction();
-
-    // Validate bet amount
-    if (amount < this.minBet || amount > this.maxBet) {
-      throw new Error('Invalid bet amount');
-    }
-
-    // Create bet transaction
-    const betTransaction = await Transaction.createAndProcess({
-      userId,
-      type: 'bet',
-      amount: -amount,
-      gameId: this._id,
-      metadata: {
-        gameName: this.name
-      }
-    });
-
-    // Calculate game outcome (implement specific game logic here)
-    const outcome = await this.calculateOutcome(amount);
-
-    // If player won, create win transaction
-    if (outcome.won) {
-      await Transaction.createAndProcess({
-        userId,
-        type: 'win',
-        amount: outcome.payout,
-        gameId: this._id,
-        metadata: {
-          gameName: this.name,
-          multiplier: outcome.multiplier
-        }
-      });
-    }
-
-    // Update game statistics
-    this.statistics.totalBets++;
-    this.statistics.totalWagered += amount;
-    if (outcome.won) {
-      this.statistics.totalPayout += outcome.payout;
-    }
-    this.lastPlayed = new Date();
-    await this.save({ session });
-
-    await session.commitTransaction();
-    return outcome;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
+// Check if game is available for play
+gameSchema.methods.isPlayable = function() {
+  return this.status === 'active';
 };
 
-// Calculate game outcome (placeholder - implement specific game logic)
-gameSchema.methods.calculateOutcome = async function(betAmount) {
-  // This is a placeholder implementation
-  // Each game should override this with its specific logic
-  const random = Math.random();
-  const won = random > (this.houseEdge / 100);
-  
-  return {
-    won,
-    multiplier: won ? 2 : 0,
-    payout: won ? betAmount * 2 : 0
-  };
+// Validate bet amount
+gameSchema.methods.validateBet = function(amount) {
+  return amount >= this.minBet && amount <= this.maxBet;
+};
+
+// Calculate potential payout
+gameSchema.methods.calculatePayout = function(betAmount, multiplier = 1) {
+  return betAmount * this.payoutRatio * multiplier;
 };
 
 // Static methods
 
 // Get active games
-gameSchema.statics.getActiveGames = function() {
-  return this.find({ isActive: true })
-    .sort({ lastPlayed: -1 });
+gameSchema.statics.getActive = function() {
+  return this.find({ status: 'active' });
 };
 
-// Get game statistics
-gameSchema.statics.getStatistics = async function() {
-  return this.aggregate([
-    {
-      $group: {
-        _id: null,
-        totalGames: { $sum: 1 },
-        activeGames: { 
-          $sum: { $cond: ['$isActive', 1, 0] }
-        },
-        totalBets: { $sum: '$statistics.totalBets' },
-        totalWagered: { $sum: '$statistics.totalWagered' },
-        totalPayout: { $sum: '$statistics.totalPayout' }
-      }
-    }
-  ]);
+// Get games by type
+gameSchema.statics.getByType = function(type) {
+  return this.find({ type, status: 'active' });
+};
+
+// Search games
+gameSchema.statics.search = function(query) {
+  return this.find({
+    $text: { $search: query },
+    status: 'active'
+  });
 };
 
 const Game = mongoose.model('Game', gameSchema);
