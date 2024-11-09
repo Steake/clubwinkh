@@ -1,0 +1,373 @@
+openapi: 3.0.0
+info:
+  title: Club Win KH API
+  version: 1.0.0
+  description: REST API for Club Win KH gaming platform
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+        email:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        balance:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        lastActive:
+          type: string
+          format: date-time
+
+    Transaction:
+      type: object
+      properties:
+        _id:
+          type: string
+        userId:
+          type: string
+        type:
+          type: string
+          enum: [deposit, withdrawal, bet, win]
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        createdAt:
+          type: string
+          format: date-time
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        _id:
+          type: string
+        userId:
+          type: string
+        username:
+          type: string
+        score:
+          type: number
+        period:
+          type: string
+          enum: [daily, weekly, monthly]
+        achievements:
+          type: array
+          items:
+            type: string
+        lastActive:
+          type: string
+          format: date-time
+
+    Game:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        minBet:
+          type: number
+        maxBet:
+          type: number
+        isActive:
+          type: boolean
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - username
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                username:
+                  type: string
+      responses:
+        201:
+          description: User created successfully
+        400:
+          description: Invalid input
+        409:
+          description: Email already exists
+
+  /auth/login:
+    post:
+      summary: Login user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        200:
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        401:
+          description: Invalid credentials
+
+  /users:
+    get:
+      summary: Get all users (admin only)
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        200:
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        403:
+          description: Forbidden
+
+  /users/{userId}:
+    get:
+      summary: Get user by ID
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        404:
+          description: User not found
+
+  /transactions:
+    post:
+      summary: Create new transaction
+      tags: [Transactions]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - amount
+              properties:
+                type:
+                  type: string
+                  enum: [deposit, withdrawal, bet, win]
+                amount:
+                  type: number
+      responses:
+        201:
+          description: Transaction created
+        400:
+          description: Invalid input
+
+    get:
+      summary: Get transactions (filtered by user or admin access)
+      tags: [Transactions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: userId
+          schema:
+            type: string
+        - in: query
+          name: type
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        200:
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+
+  /leaderboard:
+    get:
+      summary: Get leaderboard
+      tags: [Leaderboard]
+      parameters:
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [daily, weekly, monthly]
+          required: true
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+
+  /games:
+    get:
+      summary: Get all active games
+      tags: [Games]
+      responses:
+        200:
+          description: List of games
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Game'
+
+    post:
+      summary: Create new game (admin only)
+      tags: [Games]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - description
+                - minBet
+                - maxBet
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                minBet:
+                  type: number
+                maxBet:
+                  type: number
+                isActive:
+                  type: boolean
+      responses:
+        201:
+          description: Game created
+        403:
+          description: Forbidden
+
+  /games/{gameId}/bet:
+    post:
+      summary: Place a bet on a game
+      tags: [Games]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: gameId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amount
+              properties:
+                amount:
+                  type: number
+      responses:
+        200:
+          description: Bet placed successfully
+        400:
+          description: Invalid bet amount
+        403:
+          description: Insufficient balance

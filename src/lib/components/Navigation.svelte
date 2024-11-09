@@ -3,11 +3,7 @@
   import { authStore } from '$lib/stores/authStore';
 
   function handleLogout() {
-    authStore.set({
-      user: null,
-      isAuthenticated: false,
-      loading: false
-    });
+    authStore.logout();
   }
 </script>
 
@@ -50,11 +46,11 @@
       </div>
 
       <div class="flex items-center space-x-6">
-        {#if $authStore.isAuthenticated}
+        {#if $authStore.isAuthenticated && $authStore.user}
           <span class="text-gold-muted">
-            Welcome, {$authStore.user?.username}
+            Welcome, {$authStore.user.username}
           </span>
-          {#if $authStore.user?.role === 'admin'}
+          {#if $authStore.user.role === 'admin'}
             <a 
               href="/admin"
               class="text-jade hover:text-jade-light transition-colors duration-300"

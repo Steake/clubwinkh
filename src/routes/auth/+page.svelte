@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import { authStore } from '$lib/stores/authStore';
+  import { goto } from '$app/navigation';
   
   let isLogin = true;
   let email = '';
@@ -18,45 +19,35 @@
     }
 
     try {
-      authStore.update(state => ({ ...state, loading: true }));
-      
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      let success;
       
       if (isLogin) {
-        // Mock login success
-        authStore.set({
-          user: {
-            id: '1',
-            username: email.split('@')[0],
-            email,
-            role: 'user'
-          },
-          isAuthenticated: true,
-          loading: false
-        });
+        success = await authStore.login(email, password);
       } else {
-        // Mock signup success
-        authStore.set({
-          user: {
-            id: '1',
-            username,
-            email,
-            role: 'user'
-          },
-          isAuthenticated: true,
-          loading: false
-        });
+        success = await authStore.register(email, password, username);
+      }
+
+      if (success) {
+        // Redirect to home page after successful authentication
+        goto('/');
+      } else if ($authStore.error) {
+        errorMessage = $authStore.error;
       }
     } catch (error) {
-      errorMessage = 'Authentication failed. Please try again.';
-      authStore.update(state => ({ ...state, loading: false }));
+      errorMessage = 'An unexpected error occurred. Please try again.';
     }
+  }
+
+  // Clear error message when switching between login/register
+  function toggleAuthMode() {
+    isLogin = !isLogin;
+    errorMessage = '';
+    authStore.clearError();
   }
 </script>
 
 <svelte:head>
-  <title>{isLogin ? 'Login' : 'Sign Up'} - ImmerseVerse</title>
+  <title>{isLogin ? 'Login' : 'Sign Up'} - Club Win KH</title>
 </svelte:head>
 
 <div class="min-h-screen flex items-center justify-center px-4">
@@ -66,7 +57,7 @@
     <div class="deco-panel">
       <div class="text-center mb-8">
         <h1 class="font-display text-4xl deco-text mb-2">
-          {isLogin ? 'Welcome Back' : 'Join ImmerseVerse'}
+          {isLogin ? 'Welcome Back' : 'Join Club Win KH'}
         </h1>
         <p class="text-gold-muted">
           {isLogin ? 
@@ -152,10 +143,7 @@
       <div class="mt-6 text-center">
         <button
           class="text-gold-muted hover:text-gold transition-colors duration-200"
-          on:click={() => {
-            isLogin = !isLogin;
-            errorMessage = '';
-          }}
+          on:click={toggleAuthMode}
         >
           {isLogin ? 
             "Don't have an account? Sign up" : 

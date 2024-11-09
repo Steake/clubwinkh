@@ -1,38 +1,34 @@
-import { authStore } from '$lib/stores/authStore';
-import { redirect } from '@sveltejs/kit';
-import type { LayoutLoad } from './$types';
+import { browser } from '$app/environment';
+import { api } from '$lib/services/api';
+import { authStore, type AuthState } from '$lib/stores/authStore';
 
-export const load: LayoutLoad = async ({ url }) => {
-  // Protected routes that require authentication
-  const protectedRoutes = ['/profile', '/games'];
-  
-  // Admin routes that require admin role
-  const adminRoutes = ['/admin'];
-  
-  // Public routes that should redirect to home if already authenticated
-  const authRoutes = ['/auth'];
-  
-  const path = url.pathname;
-  
-  let auth: any;
-  authStore.subscribe(value => {
-    auth = value;
-  })();
+export const ssr = false;
 
-  // Redirect authenticated users away from auth pages
-  if (authRoutes.some(route => path.startsWith(route)) && auth.isAuthenticated) {
-    throw redirect(302, '/');
-  }
-
-  // Protect routes that require authentication
-  if (protectedRoutes.some(route => path.startsWith(route)) && !auth.isAuthenticated) {
-    throw redirect(302, '/auth');
-  }
-
-  // Protect admin routes
-  if (adminRoutes.some(route => path.startsWith(route)) && auth.user?.role !== 'admin') {
-    throw redirect(302, '/auth');
-  }
-
-  return {};
-};
+export async function load() {
+    if (browser) {
+        const token = localStorage.getItem('token');
+        if (token) {
+            // Set the token in the API client
+            api.setToken(token);
+            
+            // Get the current user's profile
+            const response = await api.getUser('me');
+            if (!response.error && response.data) {
+                // Update the auth store with the user data
+                authStore.update((state: AuthState) => ({
+                    ...state,
+                    user: response.data,
+                    isAuthenticated: true,
+                    loading: false,
+                    error: null
+                }));
+            } else {
+                // If there was an error, clear the invalid token
+                localStorage.removeItem('token');
+                api.clearToken();
+            }
+        }
+    }
+    
+    return {};
+}
