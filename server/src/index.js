@@ -8,7 +8,6 @@ require('dotenv').config();
 
 // Import routes
 const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users');
 const transactionRoutes = require('./routes/transactions');
 const leaderboardRoutes = require('./routes/leaderboard');
 const gameRoutes = require('./routes/games');
@@ -28,7 +27,6 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Routes
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
 app.use('/api/v1/leaderboard', leaderboardRoutes);
 app.use('/api/v1/games', gameRoutes);
