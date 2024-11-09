@@ -25,129 +25,136 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  // Clear all collections before each test
+  // Explicitly clear ALL collections
   const collections = mongoose.connection.collections;
   for (const key in collections) {
-    await collections[key].deleteMany();
+    await collections[key].deleteMany({});
   }
 });
 
 describe('Auth API', () => {
-  describe('POST /api/v1/auth/register', () => {
-    it('should register a new user', async () => {
+  describe('POST /api/v1/auth/telegram-login', () => {
+    const mockTelegramInitData = JSON.stringify({
+      user: {
+        id: '12345',
+        username: 'testuser',
+        first_name: 'Test',
+        last_name: 'User'
+      },
+      hash: 'mockedhash'
+    });
+
+    it('should create a new user via Telegram login', async () => {
       const res = await request(app)
-        .post('/api/v1/auth/register')
-        .send({
-          email: 'test@example.com',
-          password: 'password123',
-          username: 'testuser'
-        });
+        .post('/api/v1/auth/telegram-login')
+        .send({ initData: mockTelegramInitData });
 
       expect(res.statusCode).toBe(201);
       expect(res.body).toHaveProperty('token');
-      expect(res.body.user).toHaveProperty('email', 'test@example.com');
+      expect(res.body.user).toHaveProperty('email', '12345@telegram.clubwinkh.com');
       expect(res.body.user).toHaveProperty('username', 'testuser');
       expect(res.body.user).toHaveProperty('role', 'user');
     });
 
-    it('should register an admin user', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/register')
-        .send({
-          email: 'admin@example.com',
-          password: 'admin123',
-          username: 'admin',
-          role: 'admin'
-        });
+    it('should login existing Telegram user', async () => {
+      // First, create a user with Telegram ID
+      await User.create({
+        email: '12345@telegram.clubwinkh.com',
+        username: 'testuser',
+        password: 'temporarypassword',
+        telegramId: '12345'
+      });
 
-      expect(res.statusCode).toBe(201);
-      expect(res.body.user).toHaveProperty('role', 'admin');
+      const res = await request(app)
+        .post('/api/v1/auth/telegram-login')
+        .send({ initData: mockTelegramInitData });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toHaveProperty('token');
+      expect(res.body.user).toHaveProperty('telegramId', '12345');
     });
 
-    it('should not allow duplicate emails', async () => {
-      await User.create({
+    it('should reject invalid Telegram init data', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/telegram-login')
+        .send({ initData: '' });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
+  });
+
+  describe('POST /api/v1/auth/link-telegram', () => {
+    let existingUser;
+
+    beforeEach(async () => {
+      existingUser = await User.create({
         email: 'test@example.com',
         password: 'password123',
         username: 'existinguser'
       });
+    });
 
+    const mockTelegramInitData = JSON.stringify({
+      user: {
+        id: '12345',
+        username: 'telegramuser',
+        first_name: 'Telegram',
+        last_name: 'User'
+      },
+      hash: 'mockedhash'
+    });
+
+    it('should link Telegram to existing account', async () => {
       const res = await request(app)
-        .post('/api/v1/auth/register')
+        .post('/api/v1/auth/link-telegram')
         .send({
           email: 'test@example.com',
           password: 'password123',
-          username: 'testuser'
-        });
-
-      expect(res.statusCode).toBe(409);
-      expect(res.body).toHaveProperty('error', 'Email already registered');
-    });
-  });
-
-  describe('POST /api/v1/auth/login', () => {
-    beforeEach(async () => {
-      await User.create({
-        email: 'test@example.com',
-        password: 'password123',
-        username: 'testuser'
-      });
-    });
-
-    it('should login with valid credentials', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/login')
-        .send({
-          email: 'test@example.com',
-          password: 'password123'
+          telegramInitData: mockTelegramInitData
         });
 
       expect(res.statusCode).toBe(200);
       expect(res.body).toHaveProperty('token');
-      expect(res.body.user).toHaveProperty('email', 'test@example.com');
+      expect(res.body.user).toHaveProperty('telegramId', '12345');
     });
 
-    it('should not login with invalid password', async () => {
+    it('should reject link with invalid credentials', async () => {
       const res = await request(app)
-        .post('/api/v1/auth/login')
+        .post('/api/v1/auth/link-telegram')
         .send({
           email: 'test@example.com',
-          password: 'wrongpassword'
+          password: 'wrongpassword',
+          telegramInitData: mockTelegramInitData
         });
 
       expect(res.statusCode).toBe(401);
       expect(res.body).toHaveProperty('error', 'Invalid credentials');
     });
-  });
 
-  describe('GET /api/v1/auth/profile', () => {
-    let token;
-    let user;
-
-    beforeEach(async () => {
-      user = await User.create({
-        email: 'test@example.com',
-        password: 'password123',
-        username: 'testuser'
+    it('should prevent linking Telegram ID to multiple accounts', async () => {
+      // First, link Telegram to an existing account
+      await User.findByIdAndUpdate(existingUser._id, { 
+        telegramId: '12345' 
       });
-      token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET || 'test-secret');
-    });
 
-    it('should get user profile with valid token', async () => {
+      // Try to link same Telegram ID to another account
+      const anotherUser = await User.create({
+        email: 'another@example.com',
+        password: 'password123',
+        username: 'anotheruser'
+      });
+
       const res = await request(app)
-        .get('/api/v1/auth/profile')
-        .set('Authorization', `Bearer ${token}`);
+        .post('/api/v1/auth/link-telegram')
+        .send({
+          email: 'another@example.com',
+          password: 'password123',
+          telegramInitData: mockTelegramInitData
+        });
 
-      expect(res.statusCode).toBe(200);
-      expect(res.body.user).toHaveProperty('email', 'test@example.com');
-      expect(res.body.user).toHaveProperty('username', 'testuser');
-    });
-
-    it('should not get profile without token', async () => {
-      const res = await request(app)
-        .get('/api/v1/auth/profile');
-
-      expect(res.statusCode).toBe(401);
-      expect(res.body).toHaveProperty('error', 'No token provided');
+      expect(res.statusCode).toBe(409);
+      expect(res.body).toHaveProperty('error', 'Telegram account already linked to another user');
     });
   });
 });

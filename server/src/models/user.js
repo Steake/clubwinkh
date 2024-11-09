@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: [6, 'Password must be at least 6 characters long']
   },
+  telegramId: {
+    type: String,
+    index: true  // Simple index, not unique
+  },
   role: {
     type: String,
     enum: ['user', 'admin'],
@@ -109,6 +113,11 @@ userSchema.methods.updateStatus = async function(newStatus) {
 // Static method to find by email
 userSchema.statics.findByEmail = function(email) {
   return this.findOne({ email: email.toLowerCase() });
+};
+
+// Static method to find by Telegram ID
+userSchema.statics.findByTelegramId = function(telegramId) {
+  return this.findOne({ telegramId });
 };
 
 // Indexes
